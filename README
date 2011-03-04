@@ -1,0 +1,14 @@
+This module implements a linear algebra (matrix) class.
+
+The algorithms in this module are not necessarily the fastest
+possible or memory efficient.  Some optimizations have been
+made, hoever.
+
+Limitations
+-----------
+  -  supports only dense matrices
+
+  -  not the most memory efficient algorithms (returns new
+     matrices rather than performing operations in place)
+
+
