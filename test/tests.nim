@@ -63,6 +63,8 @@ suite "matrix checks":
     let xpx  = newMatrix[float](2,3,[0.0, 2.0, 4.0, 20.0, 22.0, 24.0])
     let xp10 = newMatrix[float](2,3,[10.0, 11.0, 12.0, 20.0, 21.0, 22.0])
     let xm10 = newMatrix[float](2,3,[-10.0, -9.0, -8.0, 0.0, 1.0, 2.0])
+    let xt10 = newMatrix[float](2,3,[0.0, 10.0, 20.0, 100.0, 110.0, 120.0])
+    let xd10 = newMatrix[float](2,3,[0.0, 0.1, 0.2, 1.0, 1.1, 1.2])
     let tmx  = newMatrix[float](2,3,[10.0, 9.0, 8.0, 0.0, -1.0, -2.0])
     let z    = newMatrix[float](2,3)
     # element-by-element multiply
@@ -76,6 +78,10 @@ suite "matrix checks":
     check( 10.0+x == xp10 )
     check( x-10.0 == xm10 )
     check( 10.0-x == tmx )
+    # matrix-scalar multiply and divide
+    check( x*10.0 == xt10 )
+    check( 10.0*x == xt10 )
+    check( x/10.0 == xd10 )
     # matrix multiply
     var y = transpose(x)
     var xy = newMatrix[float](2,2,[5.0, 35.0, 35.0, 365.0])

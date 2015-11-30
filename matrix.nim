@@ -1,13 +1,13 @@
 #
 #
-#            Nimrod's Runtime Library
-#        (c) Copyright 2011 Tom Krauss
+#            Nim Simple Matrix Module
+#        (c) Copyright 2015 Tom Krauss
 #
 # This module implements a linear algebra (matrix) class.
 #
 # The algorithms in this module are not necessarily the fastest
-# possible or memory efficient.  Some optimizations have been
-# made, hoever.
+# possible nor the most memory efficient.  Some optimizations have been
+# made, however.
 #
 # Limitations
 # -----------
@@ -36,9 +36,8 @@ import
 
 type
   Matrix*[T] = object
-    transposed: bool
-    dataRows:   int
-    dataCols:   int
+    numRows:   int
+    numCols:   int
     data:       seq[T]
 
 {.deprecated: [TMatrix: Matrix].}
@@ -49,22 +48,17 @@ const
 
 proc index[T](x: Matrix[T], r,c: int): int {.inline.} =
   ## Internal element access.  Returns the matrix element at
-  ## row=r, column=c taking into account the state of the "transpose"
-  ## boolean.
-  if r<0  or  r>(x.rows()-1):
-    raise newException(IndexError, "matrix index out of range")
-  if c<0  or  c>(x.cols()-1):
-    raise newException(IndexError, "matrix index out of range")
-  result = if x.transposed: c*x.dataCols+r else: r*x.dataCols+c
+  ## row=r, column=c.  Element access is _unchecked_.
+  return r*x.numCols+c
 
 
 proc rows*[T](x: Matrix[T]): int {.inline.} =
   ## Returns the number of rows in the matrix `x`.
-  result = if x.transposed: x.dataCols else: x.dataRows
+  result = x.numRows
 
 proc cols*[T](x: Matrix[T]): int {.inline.}  =
   ## Returns the number of columns in the matrix `x`.
-  result = if x.transposed: x.dataRows else: x.dataCols
+  result = x.numCols
 
 
 
@@ -72,8 +66,8 @@ proc newMatrix*[T](rows, cols: int, d: openarray[T]): Matrix[T] =
   ## Constructor.  Initializes the matrix by allocating memory
   ## for the data and setting the number of rows and columns
   ## Sets the data to the values specified in `d`.
-  result.dataRows = rows
-  result.dataCols = cols
+  result.numRows = rows
+  result.numCols = cols
   newSeq(result.data, rows*cols)
   if len(d)>0:
     if len(d)<(rows*cols):
@@ -87,8 +81,8 @@ proc newMatrix*[T](rows, cols: int): Matrix[T] =
   ## Constructor.  Initializes the matrix by allocating memory
   ## for the data and setting the number of rows and columns.
   ## Initially populated with 0.
-  result.dataRows = rows
-  result.dataCols = cols
+  result.numRows = rows
+  result.numCols = cols
   newSeq(result.data, rows*cols)
   when not (T is Complex):
     for i in countup(0,rows*cols-1):
@@ -144,8 +138,8 @@ proc zeros*[T](r,c: int): Matrix[T] = newMatrix[T](r, c)
 proc setSize*[T](x: var Matrix[T], rows, cols: int) =
   ## Initializes the matrix by allocating memory
   ## for the data and setting the number of rows and columns.
-  x.dataRows = rows
-  x.dataCols = cols
+  x.numRows = rows
+  x.numCols = cols
   newSeq(x.data, rows*cols)
 
 
@@ -153,12 +147,22 @@ proc setSize*[T](x: var Matrix[T], rows, cols: int) =
 
 proc `[]`*[T](x: Matrix[T], r,c: int): T =
   ## Element access.  Returns the element at row `r` column `c`.
+  if r<0  or  r>(x.rows()-1):
+    raise newException(IndexError, "matrix index out of range")
+  if c<0  or  c>(x.cols()-1):
+    raise newException(IndexError, "matrix index out of range")
+
   result = x.data[x.index(r,c)]
 
 
 proc `[]=`*[T](x: var Matrix[T], r,c: int, a: T) =
   ## Sets the value of the element at row `r` column `c` to
   ## the value supplied in `a`.
+  if r<0  or  r>(x.rows()-1):
+    raise newException(IndexError, "matrix index out of range")
+  if c<0  or  c>(x.cols()-1):
+    raise newException(IndexError, "matrix index out of range")
+
   x.data[x.index(r,c)] = a
 
 
@@ -176,9 +180,11 @@ proc `$`*[T](x: Matrix[T]): string =
 
 
 proc transpose*[T](x: Matrix[T]): Matrix[T] =
-  ## Transpose matrix (does not actually transpose data)
-  result = x
-  result.transposed = not x.transposed
+  ## Transpose matrix
+  result = newMatrix[T](x.cols, x.rows)
+  for r in countup(0,x.rows()-1):
+    for c in countup(0,x.cols()-1):
+      result.data[ result.index(c,r) ] = x.data[ x.index(r,c) ]
 
 
 proc `==`*[T](a: Matrix[T], b: Matrix[T]): bool =
@@ -188,12 +194,9 @@ proc `==`*[T](a: Matrix[T], b: Matrix[T]): bool =
   ## be `false`.
   if (a.rows()==b.rows()) and (a.cols()==b.cols()):
     result = true
-    for r in countup(0,a.rows()-1):
-      for c in countup(0,a.cols()-1):
-        if a[r,c] != b[r,c]:
-          result = false
-          break
-      if not result:
+    for i in low(a.data)..high(a.data):
+      if a.data[i] != b.data[i]:
+        result = false
         break
   else:
     result=false
@@ -204,12 +207,9 @@ proc `=~`*[T](a, b: Matrix[T]): bool =
   ## Compare two matrices `a` and `b` approximately.
   if (a.rows()==b.rows()) and (a.cols()==b.cols()):
     result = true
-    for r in countup(0,a.rows()-1):
-      for c in countup(0,a.cols()-1):
-        if abs(a[r,c]-b[r,c])>EPS:
-          result = false
-          break
-      if not result:
+    for i in low(a.data)..high(a.data):
+      if abs(a.data[i] - b.data[i]) > EPS:
+        result = false
         break
   else:
     result=false
@@ -224,7 +224,9 @@ proc `*`*[T](a: Matrix[T], b: Matrix[T]): Matrix[T] =
     for j in countup(0,b.cols()-1):
       result[i,j] = 0.0
       for k in countup(0,a.cols()-1):
-        result[i,j] = result[i,j] + a[i,k]*b[k,j]
+        result.data[ result.index(i,j) ] =
+              result.data[ result.index(i,j) ] +
+              a.data[ a.index(i,k) ]*b.data[ b.index(k,j) ]
 
 
 proc `*.`*[T](a: Matrix[T], b: Matrix[T]): Matrix[T] =
@@ -234,77 +236,69 @@ proc `*.`*[T](a: Matrix[T], b: Matrix[T]): Matrix[T] =
   result.setSize(a.rows(), a.cols())
   for r in countup(0,a.rows()-1):
     for c in countup(0,a.cols()-1):
-      result[r,c] = a[r,c]*b[r,c]
+      result.data[ result.index(r,c) ] =
+         a.data[ a.index(r,c) ]*b.data[ b.index(r,c) ]
 
 proc `*`*[T](a: Matrix[T], b: T): Matrix[T] =
   ## Multiplies a matrix `a` by type T `b` (a*b)
-  result.setSize(a.rows(), a.cols())
-  for r in countup(0,a.rows()-1):
-    for c in countup(0,a.cols()-1):
-      result[r,c] = a[r,c]*b
+  result.setSize(a.rows(),a.cols())
+  for i in low(result.data)..high(result.data):
+    result.data[i] = a.data[i] * b
 
 proc `*`*[T](a: T, b: Matrix[T]): Matrix[T] =
   ## Multiplies a matrix `b` by type T `a` (a*b)
-  result.setSize(b.rows(), b.cols())
-  for r in countup(0,b.rows()-1):
-    for c in countup(0,b.cols()-1):
-      result[r,c] = a*b[r,c]
+  result.setSize(b.rows(),b.cols())
+  for i in low(result.data)..high(result.data):
+    result.data[i] = a * b.data[i]
 
 
 proc `-`*[T](a: Matrix[T], b: Matrix[T]): Matrix[T] =
   ## Element-by-element subtraction (a-b)
   assert( a.rows()==b.rows() )
   assert( a.cols()==b.cols() )
-  result.setSize(a.rows(), a.cols())
-  for r in countup(0,a.rows()-1):
-    for c in countup(0,a.cols()-1):
-      result[r,c] = a[r,c]-b[r,c]
+  result.setSize(a.rows(),a.cols())
+  for i in low(result.data)..high(result.data):
+    result.data[i] = a.data[i] - b.data[i]
 
 proc `-`*[T](a: Matrix[T], b: T): Matrix[T] =
   ## Subtraction of type T `b` from matrix `a` (a-b)
-  result.setSize(a.rows(), a.cols())
-  for r in countup(0,a.rows()-1):
-    for c in countup(0,a.cols()-1):
-      result[r,c] = a[r,c]-b
+  result.setSize(a.rows(),a.cols())
+  for i in low(result.data)..high(result.data):
+    result.data[i] = a.data[i] - b
 
 proc `-`*[T](a: T, b: Matrix[T]): Matrix[T] =
   ## Subtraction of matrix `a` from type T `b` (a-b)
   result.setSize(b.rows(), b.cols())
-  for r in countup(0,b.rows()-1):
-    for c in countup(0,b.cols()-1):
-      result[r,c] = a-b[r,c]
+  for i in low(result.data)..high(result.data):
+    result.data[i] = a-b.data[i]
 
 
 proc `+`*[T](a: Matrix[T], b: Matrix[T]): Matrix[T] =
   ## Element-by-element addition (a+b)
   assert( a.rows()==b.rows() )
   assert( a.cols()==b.cols() )
-  result.setSize(a.rows(), a.cols())
-  for r in countup(0,a.rows()-1):
-    for c in countup(0,a.cols()-1):
-      result[r,c] = a[r,c]+b[r,c]
+  result.setSize(a.rows(),a.cols())
+  for i in low(result.data)..high(result.data):
+    result.data[i] = a.data[i] + b.data[i]
 
 proc `+`*[T](a: Matrix[T], b: T): Matrix[T] =
   ## Addition of type T to matrix (a+b)
   result.setSize(a.rows(), a.cols())
-  for r in countup(0,a.rows()-1):
-    for c in countup(0,a.cols()-1):
-      result[r,c] = a[r,c]+b
+  for i in low(result.data)..high(result.data):
+    result.data[i] = a.data[i] + b
 
 proc `+`*[T](a: T, b: Matrix[T]): Matrix[T] =
   ## Addition of type T to matrix (a+b)
   result.setSize(b.rows(), b.cols())
-  for r in countup(0,b.rows()-1):
-    for c in countup(0,b.cols()-1):
-      result[r,c] = a+b[r,c]
+  for i in low(result.data)..high(result.data):
+    result.data[i] = a + b.data[i]
 
 
 proc `/`*[T](a: Matrix[T], b: T): Matrix[T] =
   ## Division of matrix `a` by type T `b` (a/b)
   result.setSize(a.rows(), a.cols())
-  for r in countup(0,a.rows()-1):
-    for c in countup(0,a.cols()-1):
-      result[r,c] = a[r,c]/b
+  for i in low(result.data)..high(result.data):
+    result.data[i] = a.data[i] / b
 
 
 # Apply a math function to each element of the matrix.
